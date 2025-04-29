@@ -25,6 +25,8 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         uint256 amount;
         uint256 timestamp;
         bool isActive;
+        bool isAccepted;
+        address bidder;
     }
 
     IERC20 public stablecoin;
@@ -34,6 +36,8 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
     mapping(uint256 => address) public currentBidder;
     mapping(address => uint256[]) public sellerTickets; // Mapping of seller to their ticket IDs
     mapping(address => Bid[]) public userBids; // Mapping of user to their bids
+    mapping(uint256 => Bid[]) public ticketBids; // Mapping of ticket ID to all bids
+    mapping(uint256 => mapping(address => bool)) public hasUserBid; // Mapping to track if user has bid on a ticket
     address public verifier; // AVS node address
 
     event TicketListed(uint256 ticketId, address seller, string details, uint256 minBid, uint256 bidExpiryTime, uint256 sellerExpiryTime);
@@ -106,32 +110,29 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         require(!ticket.sold, "Already sold");
         require(block.timestamp <= ticket.bidExpiryTime, "Bidding period has expired");
         require(bidAmount >= ticket.minBid, "Bid too low");
-        require(bidAmount >= currentBidAmount[ticketId], "There is a higher bid");
-
-        // Refund previous bidder
-        if (currentBidder[ticketId] != address(0)) {
-            stablecoin.safeTransfer(currentBidder[ticketId], currentBidAmount[ticketId]);
-            // Mark previous bid as inactive
-            for (uint256 i = 0; i < userBids[currentBidder[ticketId]].length; i++) {
-                if (userBids[currentBidder[ticketId]][i].ticketId == ticketId) {
-                    userBids[currentBidder[ticketId]][i].isActive = false;
-                    break;
-                }
-            }
-        }
+        require(!hasUserBid[ticketId][msg.sender], "User has already bid on this ticket");
 
         // Transfer tokens to contract as lock
         stablecoin.safeTransferFrom(msg.sender, address(this), bidAmount);
-        currentBidder[ticketId] = msg.sender;
-        currentBidAmount[ticketId] = bidAmount;
 
-        // Add new bid to user's bid history
-        userBids[msg.sender].push(Bid({
+        // Create new bid
+        Bid memory newBid = Bid({
             ticketId: ticketId,
             amount: bidAmount,
             timestamp: block.timestamp,
-            isActive: true
-        }));
+            isActive: true,
+            isAccepted: false,
+            bidder: msg.sender
+        });
+
+        // Add bid to ticket's bid list
+        ticketBids[ticketId].push(newBid);
+        
+        // Add bid to user's bid history
+        userBids[msg.sender].push(newBid);
+        
+        // Mark user as having bid on this ticket
+        hasUserBid[ticketId][msg.sender] = true;
 
         emit BidPlaced(ticketId, msg.sender, bidAmount);
     }
@@ -141,19 +142,55 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         Ticket storage ticket = tickets[ticketId];
         require(ticket.seller != address(0), "Ticket does not exist");
         require(!ticket.sold, "Already processed");
-        require(currentBidder[ticketId] != address(0), "No bidder");
+        require(block.timestamp > ticket.bidExpiryTime, "Bidding period not ended");
 
-        if (success) {
-            // Send funds to seller
-            stablecoin.safeTransfer(ticket.seller, currentBidAmount[ticketId]);
-            ticket.sold = true;
-            ticket.buyer = currentBidder[ticketId];
+        Bid[] storage bids = ticketBids[ticketId];
+        require(bids.length > 0, "No bids found for this ticket");
+
+        if (!success) {
+            // Refund all bidders
+            for (uint256 i = 0; i < bids.length; i++) {
+                if (bids[i].isActive) {
+                    stablecoin.safeTransfer(bids[i].bidder, bids[i].amount);
+                    bids[i].isActive = false;
+                }
+            }
         } else {
-            // Refund bidder
-            stablecoin.safeTransfer(currentBidder[ticketId], currentBidAmount[ticketId]);
+            // Find the highest bid
+            uint256 highestBidIndex = 0;
+            uint256 highestAmount = 0;
+
+            for (uint256 i = 0; i < bids.length; i++) {
+                if (bids[i].isActive && bids[i].amount > highestAmount) {
+                    highestAmount = bids[i].amount;
+                    highestBidIndex = i;
+                }
+            }
+
+            require(highestAmount > 0, "No valid bid found");
+
+            // Mark the highest bid as accepted
+            bids[highestBidIndex].isAccepted = true;
+            ticket.sold = true;
+            ticket.buyer = bids[highestBidIndex].bidder;
+
+            // Transfer funds to seller
+            stablecoin.safeTransfer(ticket.seller, highestAmount);
+
+            // Refund all other bidders
+            for (uint256 i = 0; i < bids.length; i++) {
+                if (i != highestBidIndex && bids[i].isActive) {
+                    stablecoin.safeTransfer(bids[i].bidder, bids[i].amount);
+                    bids[i].isActive = false;
+                }
+            }
         }
 
         emit ProofSubmitted(ticketId, ticket.seller);
+    }
+
+    function getTicketBids(uint256 ticketId) external view returns (Bid[] memory) {
+        return ticketBids[ticketId];
     }
 
     function processExpiredTickets() external nonReentrant {
