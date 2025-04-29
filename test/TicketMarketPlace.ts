@@ -101,7 +101,7 @@ describe('TicketMarketplace', () => {
       });
 
       // Mint tokens to buyers and approve marketplace
-      const amount = BigInt(1000 * 10 ** 6); // 1000 USDC
+      const amount = BigInt(10000 * 10 ** 6); // 1000 USDC
       await walletClient.writeContract({
         address: mockUSDC.address,
         abi: mockUSDC.abi,
@@ -1058,6 +1058,192 @@ describe('TicketMarketplace', () => {
       expect(newBid.ticketId).to.equal(ticketId);
       expect(newBid.amount).to.equal(BigInt(100 * 10 ** 6));
       expect(newBid.isActive).to.equal(true);
+    });
+
+    it('Should process expired tickets and refund all bidders', async function () {
+      const sellerWalletClient = createWalletClient({
+        account: hardhatAccounts[1].account as Account,
+        chain: hardhat,
+        transport: http()
+      });
+
+      const buyer1WalletClient = createWalletClient({
+        account: hardhatAccounts[2].account as Account,
+        chain: hardhat,
+        transport: http()
+      });
+
+      const buyer2WalletClient = createWalletClient({
+        account: hardhatAccounts[3].account as Account,
+        chain: hardhat,
+        transport: http()
+      });
+
+      // Get current block timestamp
+      const latestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+      const currentTime = BigInt(latestBlock.timestamp);
+      
+      // Set expiry times to be very short
+      const bidExpiryTime = currentTime + 4n; // 4 seconds
+      const sellerExpiryTime = currentTime + 6n; // 6 seconds
+      const minBid = BigInt(100 * 10 ** 6); // 100 USDC
+
+      // Get initial balances
+      const initialBuyer1Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+
+      const initialBuyer2Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer2]
+      });
+
+      const initialContractBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [ticketMarketplace.address]
+      });
+
+      console.log("initialContractBalance", initialContractBalance);
+      console.log("initialBuyer1Balance", initialBuyer1Balance);
+      console.log("initialBuyer2Balance", initialBuyer2Balance);
+      // Create a new ticket for this test
+      await sellerWalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'listTicket',
+        args: ["Expired Concert", minBid, bidExpiryTime, sellerExpiryTime]
+      });
+
+      // Get the new ticket ID
+      const ticketId = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'nextTicketId'
+      }) - 1n;
+      console.log("ticketId", ticketId);
+      // Place bids from both buyers
+      await buyer1WalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'placeBid',
+        args: [ticketId, minBid]
+      });
+
+      await buyer2WalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'placeBid',
+        args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
+      });
+
+      // Check balances after placing bids
+      const afterBidBuyer1Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+
+      const afterBidBuyer2Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer2]
+      });
+
+      const afterBidContractBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [ticketMarketplace.address]
+      });
+
+      console.log("afterBidContractBalance", afterBidContractBalance);
+      console.log("afterBidBuyer1Balance", afterBidBuyer1Balance);
+      console.log("afterBidBuyer2Balance", afterBidBuyer2Balance);
+
+      // Verify bid amounts were transferred to contract
+      expect(BigInt(initialBuyer1Balance) - BigInt(afterBidBuyer1Balance)).to.equal(minBid);
+      expect(BigInt(initialBuyer2Balance) - BigInt(afterBidBuyer2Balance)).to.equal(minBid + BigInt(50 * 10 ** 6));
+      expect(BigInt(afterBidContractBalance) - BigInt(initialContractBalance)).to.equal(minBid + minBid + BigInt(50 * 10 ** 6));
+
+      // Wait for seller expiry
+      await new Promise(resolve => setTimeout(resolve, 6000)); // Wait 4 seconds
+
+      // Process expired tickets
+      await walletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'processExpiredTickets'
+      });
+
+      // Check final balances
+      const finalBuyer1Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+
+      const finalBuyer2Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer2]
+      });
+
+      const finalContractBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [ticketMarketplace.address]
+      });
+
+      console.log("finalBuyer1Balance", finalBuyer1Balance);
+      console.log("finalBuyer2Balance", finalBuyer2Balance);
+      console.log("finalContractBalance", finalContractBalance);
+      // Verify all bid amounts were refunded
+      expect(BigInt(finalBuyer1Balance) - BigInt(afterBidBuyer1Balance)).to.equal(minBid);
+      expect(BigInt(finalBuyer2Balance) - BigInt(afterBidBuyer2Balance)).to.equal(minBid + BigInt(50 * 10 ** 6));
+      expect(BigInt(afterBidContractBalance) - BigInt(finalContractBalance)).to.equal(minBid + minBid + BigInt(50 * 10 ** 6));
+
+      // Verify ticket is marked as sold
+      const ticket = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'tickets',
+        args: [ticketId]
+      });
+      expect(ticket[4]).to.equal(true); // sold status
+
+      // Verify ticket is removed from seller's active tickets
+      const sellerTickets = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getSellerTickets',
+        args: [seller]
+      });
+
+      const buyer2userBids = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getUserBids',
+        args: [buyer2]
+      });
+      
+
+      console.log("sellerTickets", sellerTickets);
+      console.log("buyer2userBids", buyer2userBids);
+      // Check if the ticket is no longer in seller's active tickets
+      const ticketExists = sellerTickets.some((ticket: any) => ticket.id === ticketId);
+      expect(ticketExists).to.equal(true);
     });
   });
 });

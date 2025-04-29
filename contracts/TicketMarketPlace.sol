@@ -148,11 +148,25 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         require(bids.length > 0, "No bids found for this ticket");
 
         if (!success) {
-            // Refund all bidders
+            // Refund all bidders and update bid status in all mappings
             for (uint256 i = 0; i < bids.length; i++) {
                 if (bids[i].isActive) {
+                    // Refund the bidder
                     stablecoin.safeTransfer(bids[i].bidder, bids[i].amount);
+                    
+                    // Update status in ticketBids
                     bids[i].isActive = false;
+                    bids[i].isAccepted = false; // Ensure bid is marked as not accepted
+                    
+                    // Update status in userBids
+                    Bid[] storage userBidsList = userBids[bids[i].bidder];
+                    for (uint256 j = 0; j < userBidsList.length; j++) {
+                        if (userBidsList[j].ticketId == ticketId && userBidsList[j].isActive) {
+                            userBidsList[j].isActive = false;
+                            userBidsList[j].isAccepted = false; // Ensure bid is marked as not accepted
+                            break;
+                        }
+                    }
                 }
             }
         } else {
@@ -174,14 +188,38 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
             ticket.sold = true;
             ticket.buyer = bids[highestBidIndex].bidder;
 
+            // Update isAccepted in userBids for the winning bid
+            Bid[] storage winningUserBids = userBids[bids[highestBidIndex].bidder];
+            for (uint256 j = 0; j < winningUserBids.length; j++) {
+                if (winningUserBids[j].ticketId == ticketId && winningUserBids[j].isActive) {
+                    winningUserBids[j].isAccepted = true;
+                    winningUserBids[j].isActive = false;
+                    break;
+                }
+            }
+
             // Transfer funds to seller
             stablecoin.safeTransfer(ticket.seller, highestAmount);
 
-            // Refund all other bidders
+            // Refund all other bidders and update bid status in all mappings
             for (uint256 i = 0; i < bids.length; i++) {
                 if (i != highestBidIndex && bids[i].isActive) {
+                    // Refund the bidder
                     stablecoin.safeTransfer(bids[i].bidder, bids[i].amount);
+                    
+                    // Update status in ticketBids
                     bids[i].isActive = false;
+                    bids[i].isAccepted = false; // Ensure bid is marked as not accepted
+                    
+                    // Update status in userBids
+                    Bid[] storage userBidsList = userBids[bids[i].bidder];
+                    for (uint256 j = 0; j < userBidsList.length; j++) {
+                        if (userBidsList[j].ticketId == ticketId && userBidsList[j].isActive) {
+                            userBidsList[j].isActive = false;
+                            userBidsList[j].isAccepted = false; // Ensure bid is marked as not accepted
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -202,28 +240,37 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
                 continue;
             }
 
-            // Process bid expiry
-            if (block.timestamp > ticket.bidExpiryTime && currentBidder[i] != address(0)) {
-                // Refund the current bidder
-                stablecoin.safeTransfer(currentBidder[i], currentBidAmount[i]);
-                emit BidExpired(i, currentBidder[i], currentBidAmount[i]);
-                currentBidder[i] = address(0);
-                currentBidAmount[i] = 0;
-            }
-
-            // Process seller expiry
+            // Check if seller expiry time has passed
             if (block.timestamp > ticket.sellerExpiryTime) {
-                // Mark ticket as expired
-                emit TicketExpired(i, ticket.seller);
-                // Remove from seller's active tickets
-                uint256[] storage sellerTicketIds = sellerTickets[ticket.seller];
-                for (uint256 j = 0; j < sellerTicketIds.length; j++) {
-                    if (sellerTicketIds[j] == i) {
-                        sellerTicketIds[j] = sellerTicketIds[sellerTicketIds.length - 1];
-                        sellerTicketIds.pop();
-                        break;
+                // Get all bids for this ticket
+                Bid[] storage bids = ticketBids[i];
+                
+                // Refund all bidders and update bid status in all mappings
+                for (uint256 j = 0; j < bids.length; j++) {
+                    if (bids[j].isActive) {
+                        // Refund the bidder
+                        stablecoin.safeTransfer(bids[j].bidder, bids[j].amount);
+                        
+                        // Update status in ticketBids
+                        bids[j].isActive = false;
+                        bids[j].isAccepted = false; // Ensure bid is marked as not accepted
+                        
+                        // Update status in userBids
+                        Bid[] storage userBidsList = userBids[bids[j].bidder];
+                        for (uint256 k = 0; k < userBidsList.length; k++) {
+                            if (userBidsList[k].ticketId == i && userBidsList[k].isActive) {
+                                userBidsList[k].isActive = false;
+                                userBidsList[k].isAccepted = false; // Ensure bid is marked as not accepted
+                                break;
+                            }
+                        }
                     }
                 }
+    
+                // Mark ticket as sold
+                ticket.sold = true;
+
+                emit TicketExpired(i, ticket.seller);
             }
         }
     }
