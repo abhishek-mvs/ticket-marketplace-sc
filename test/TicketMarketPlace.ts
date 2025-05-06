@@ -2,7 +2,7 @@ import { expect } from 'chai';
 import { createPublicClient, createWalletClient, http, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { hardhat } from 'viem/chains';
-import hre from 'hardhat';
+import hre, { network } from 'hardhat';
 import { Account } from 'viem/accounts';
 
 describe('TicketMarketplace', () => {
@@ -188,7 +188,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: [eventDetails, minBid, bidExpiryTime, sellerExpiryTime]
+        args: [eventDetails, 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
       
       const ticket = await publicClient.readContract({
@@ -197,17 +197,16 @@ describe('TicketMarketplace', () => {
         functionName: 'tickets',
         args: [0n]
       });
-      
+      console.log("ticket", ticket);
       const ticketListFromContract = await publicClient.readContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'getAllTickets'
       });
-      console.log("ticketList", ticketListFromContract);
-
+      
       expect(ticket[1].toLowerCase()).to.equal(seller.toLowerCase());
-      expect(ticket[2]).to.equal(eventDetails);
-      expect(ticket[3]).to.equal(minBid);
+      expect(ticket[3]).to.equal(eventDetails);
+      expect(ticket[4]).to.equal(minBid);
     });
 
     it('Should not allow listing with empty details', async function () {
@@ -221,17 +220,24 @@ describe('TicketMarketplace', () => {
       const bidExpiryTime = currentTime + 3600n;
       const sellerExpiryTime = currentTime + 7200n;
 
+      // Test with empty string
       await expect(
         sellerWalletClient.writeContract({
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: ["", BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
+          args: ["", 0n, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
         })
-      ).to.be.rejectedWith("Empty event details");
+      ).to.be.rejectedWith(/Empty event details/);
     });
 
     it('Should not allow listing with zero minimum bid', async function () {
+
+      const ticketListFromContract = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getAllTickets'
+      });
       const sellerWalletClient = createWalletClient({
         account: hardhatAccounts[1].account as Account,
         chain: hardhat,
@@ -242,14 +248,25 @@ describe('TicketMarketplace', () => {
       const bidExpiryTime = currentTime + 3600n;
       const sellerExpiryTime = currentTime + 7200n;
       
+      // Test with zero
       await expect(
         sellerWalletClient.writeContract({
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: ["Concert", 0n, bidExpiryTime, sellerExpiryTime]
+          args: ["Concert", 0n, 0n, bidExpiryTime, sellerExpiryTime]
         })
-      ).to.be.rejectedWith("Minimum bid must be greater than 0");
+      ).to.be.rejectedWith(/Minimum bid must be greater than 0/);
+
+      // Test with negative number (should also fail)
+      await expect(
+        sellerWalletClient.writeContract({
+          address: ticketMarketplace.address,
+          abi: ticketMarketplace.abi,
+          functionName: 'listTicket',
+          args: ["Concert", 0n,-1n, bidExpiryTime, sellerExpiryTime]
+        })
+      ).to.be.rejected;
     });
 
     it('Should return list of all tickets', async function () {
@@ -275,8 +292,7 @@ describe('TicketMarketplace', () => {
         abi: ticketMarketplace.abi,
         functionName: 'getAllTickets'
       });
-      console.log("ticketLis in list of all tickets", ticketListFromContract);
-
+      
       // Get initial ticket count
       const initialTicketCount = await publicClient.readContract({
         address: ticketMarketplace.address,
@@ -290,7 +306,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: [ticket.details, ticket.minBid, bidExpiryTime, sellerExpiryTime]
+          args: [ticket.details, 0n, ticket.minBid, bidExpiryTime, sellerExpiryTime]
         });
       }
 
@@ -305,13 +321,11 @@ describe('TicketMarketplace', () => {
       expect(finalTicketCount - initialTicketCount).to.equal(BigInt(tickets.length));
 
       // Print all tickets
-      console.log('\n=== All Tickets in Contract ===');
       const allTickets = await publicClient.readContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'getAllTickets'
       });
-      console.log("allTickets", allTickets);
       for (let i = 0; i < allTickets.length; i++) {
         const ticket = allTickets[i];
         const currentBid = await publicClient.readContract({
@@ -382,7 +396,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: [ticket.details, ticket.minBid, bidExpiryTime, sellerExpiryTime]
+          args: [ticket.details, 0n, ticket.minBid, bidExpiryTime, sellerExpiryTime]
         });
       }
 
@@ -403,8 +417,8 @@ describe('TicketMarketplace', () => {
           args: [ticketId]
         });
         expect(ticket[1].toLowerCase()).to.equal(seller.toLowerCase());
-        expect(ticket[2]).to.equal(tickets[i].details);
-        expect(ticket[3]).to.equal(tickets[i].minBid);
+        expect(ticket[3]).to.equal(tickets[i].details);
+        expect(ticket[4]).to.equal(tickets[i].minBid);
       }
     });
   });
@@ -435,7 +449,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: [eventDetails, minBid, bidExpiryTime, sellerExpiryTime]
+        args: [eventDetails, 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -491,7 +505,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -548,7 +562,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -611,14 +625,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert 1", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert 1", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       await sellerWalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert 2", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert 2", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket IDs
@@ -685,7 +699,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
       
       await expect(
@@ -700,7 +714,7 @@ describe('TicketMarketplace', () => {
   });
 
   describe('Ticket Delivery Confirmation', function () {
-    it('Should process highest bid on successful delivery', async function () {
+    it('Should get the best bid and process highest bid on successful delivery', async function () {
       const minBid = BigInt(100 * 10 ** 6);
       
       const sellerWalletClient = createWalletClient({
@@ -732,20 +746,192 @@ describe('TicketMarketplace', () => {
       const currentTime = BigInt(latestBlock.timestamp);
       
       // Set expiry times to be in the future
-      const bidExpiryTime = currentTime + 4n; // 2 seconds
-      const sellerExpiryTime = currentTime + 10n; // 3 seconds
-
-      console.log('\n=== Timestamps for Successful Delivery Test ===');
-      console.log('Current block timestamp:', currentTime.toString());
-      console.log('Bid expiry time:', bidExpiryTime.toString());
-      console.log('Seller expiry time:', sellerExpiryTime.toString());
-
+      const bidExpiryTime = currentTime + 4n; // 4 seconds
+      const sellerExpiryTime = currentTime + 10n; // 10 seconds
+      console.log("Should get the best bid and process highest bid on successful delivery currentTime", currentTime);
+      console.log("Should get the best bid and process highest bid on successful delivery bidExpiryTime", bidExpiryTime);
+      console.log("Should get the best bid and process highest bid on successful delivery sellerExpiryTime", sellerExpiryTime);
       // Create a new ticket for this test
       await sellerWalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
+      });
+
+      // Get the new ticket ID
+      const ticketId = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'nextTicketId'
+      }) - 1n;
+
+      // Place multiple bids
+      await buyer1WalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'placeBid',
+        args: [ticketId, minBid]
+      });
+
+      await buyer2WalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'placeBid',
+        args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
+      });
+      const latestBlockAfterPlaceBid = await publicClient.getBlock({ blockTag: 'latest' });
+      const currentTimeAfterPlaceBid = BigInt(latestBlockAfterPlaceBid.timestamp);
+      console.log("currentTimeAfterPlaceBid", currentTimeAfterPlaceBid);
+      console.log("DateTime after placeBid", new Date().getTime()/1000);
+      // Fast forward time past bid expiry
+      // Increase time by 10 seconds
+      await network.provider.send("evm_increaseTime", [10]);
+      // Force block mining
+      await network.provider.send("evm_mine");
+      const latestBlockAfterFastForward = await publicClient.getBlock({ blockTag: 'latest' });
+      const currentTimeAfterFastForward = BigInt(latestBlockAfterFastForward.timestamp);
+      console.log("currentTimeAfterFastForward", currentTimeAfterFastForward);
+      console.log("DateTime after fast forward", new Date().getTime()/1000);
+
+      // Get initial balances
+      const initialBuyer1Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+
+      const initialBuyer2Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer2]
+      });
+
+      const latestBlockAfterBidExpiry = await publicClient.getBlock({ blockTag: 'latest' });
+      console.log("Should get the best bid and process highest bid on successful delivery latestBlockAfterBidExpiry",  BigInt(latestBlockAfterBidExpiry.timestamp));
+      // Get the best bid (view function)
+      const [winner, amount] = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getTheBestBid',
+        args: [ticketId]
+      });
+
+      // Verify winner and amount
+      expect(winner.toLowerCase()).to.equal(buyer2.toLowerCase());
+      expect(amount).to.equal(minBid + BigInt(50 * 10 ** 6));
+
+      // Verify balances haven't changed yet (getTheBestBid is view only)
+      const afterBestBidBuyer1Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+      expect(afterBestBidBuyer1Balance).to.equal(initialBuyer1Balance);
+
+      const afterBestBidBuyer2Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer2]
+      });
+      expect(afterBestBidBuyer2Balance).to.equal(initialBuyer2Balance);
+
+      // Get initial seller balance
+      const initialSellerBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [seller]
+      });
+
+      // Confirm delivery (this will process refunds and final settlement)
+      await verifierWalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'confirmTicketDelivery',
+        args: [ticketId, true]
+      });
+
+      // Verify buyer1 was refunded
+      const finalBuyer1Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+      expect(BigInt(finalBuyer1Balance) - BigInt(initialBuyer1Balance)).to.equal(minBid);
+
+      // Verify buyer2's balance hasn't changed (they won)
+      const finalBuyer2Balance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer2]
+      });
+      expect(finalBuyer2Balance).to.equal(initialBuyer2Balance);
+
+      // Verify seller received the payment
+      const finalSellerBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [seller]
+      });
+      expect(BigInt(finalSellerBalance) - BigInt(initialSellerBalance)).to.equal(minBid + BigInt(50 * 10 ** 6));
+
+      // Verify ticket status
+      const ticket = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'tickets',
+        args: [ticketId]
+      });
+      
+      expect(ticket[4]).to.equal(true); // sold status
+      expect(ticket[5].toLowerCase()).to.equal(buyer2.toLowerCase()); // buyer address
+    });
+
+    it('Should allow multiple calls to getTheBestBid without processing refunds', async function () {
+      const minBid = BigInt(100 * 10 ** 6);
+      
+      const sellerWalletClient = createWalletClient({
+        account: hardhatAccounts[1].account as Account,
+        chain: hardhat,
+        transport: http()
+      });
+
+      const buyer1WalletClient = createWalletClient({
+        account: hardhatAccounts[2].account as Account,
+        chain: hardhat,
+        transport: http()
+      });
+
+      const buyer2WalletClient = createWalletClient({
+        account: hardhatAccounts[3].account as Account,
+        chain: hardhat,
+        transport: http()
+      });
+
+      // Get current block timestamp
+      const latestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+      const currentTime = BigInt(latestBlock.timestamp);
+      
+      const bidExpiryTime = currentTime + 4n;
+      const sellerExpiryTime = currentTime + 10n;
+
+      console.log("Should allow multiple calls to getTheBestBid without processing refunds currentTime", currentTime);
+      console.log("Should allow multiple calls to getTheBestBid without processing refunds bidExpiryTime", bidExpiryTime);
+      console.log("Should allow multiple calls to getTheBestBid without processing refunds sellerExpiryTime", sellerExpiryTime);
+      // Create a new ticket for this test
+      await sellerWalletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'listTicket',
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -770,43 +956,58 @@ describe('TicketMarketplace', () => {
         args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
       });
       
-      // Fast forward time past bid expiry
-      await new Promise(resolve => setTimeout(resolve, 4000)); // Wait 4 seconds
-      
-      const initialSellerBalance = await publicClient.readContract({
+      // Wait for bid expiry
+      await new Promise(resolve => setTimeout(resolve, 6000));
+      const afterBidExpiryLatestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+      console.log("Should allow multiple calls to getTheBestBid without processing refunds",  BigInt(afterBidExpiryLatestBlock.timestamp));
+
+      // Get initial balances
+      const initialBuyer1Balance = await publicClient.readContract({
         address: mockUSDC.address,
         abi: mockUSDC.abi,
         functionName: 'balanceOf',
-        args: [seller]
+        args: [buyer1]
       });
 
-      await verifierWalletClient.writeContract({
+      // First call to getTheBestBid
+      const [winner1, amount1] = await publicClient.readContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
-        functionName: 'confirmTicketDelivery',
-        args: [ticketId, true]
-      });
-
-      const finalSellerBalance = await publicClient.readContract({
-        address: mockUSDC.address,
-        abi: mockUSDC.abi,
-        functionName: 'balanceOf',
-        args: [seller]
-      });
-      
-      // Verify seller received the highest bid amount
-      expect(BigInt(finalSellerBalance) - BigInt(initialSellerBalance)).to.equal(minBid + BigInt(50 * 10 ** 6));
-
-      // Verify ticket status
-      const ticket = await publicClient.readContract({
-        address: ticketMarketplace.address,
-        abi: ticketMarketplace.abi,
-        functionName: 'tickets',
+        functionName: 'getTheBestBid',
         args: [ticketId]
       });
-      
-      expect(ticket[4]).to.equal(true); // sold status
-      expect(ticket[5].toLowerCase()).to.equal(buyer2.toLowerCase()); // buyer address
+
+      // Get balance after first call
+      const afterFirstCallBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+
+      // Second call to getTheBestBid
+      const [winner2, amount2] = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getTheBestBid',
+        args: [ticketId]
+      });
+
+      // Get balance after second call
+      const afterSecondCallBalance = await publicClient.readContract({
+        address: mockUSDC.address,
+        abi: mockUSDC.abi,
+        functionName: 'balanceOf',
+        args: [buyer1]
+      });
+
+      // Verify balances haven't changed between calls (getTheBestBid is view only)
+      expect(afterFirstCallBalance).to.equal(initialBuyer1Balance);
+      expect(afterSecondCallBalance).to.equal(initialBuyer1Balance);
+
+      // Verify winners and amounts are the same
+      expect(winner1.toLowerCase()).to.equal(winner2.toLowerCase());
+      expect(amount1).to.equal(amount2);
     });
 
     it('Should refund buyer on failed delivery', async function () {
@@ -834,20 +1035,15 @@ describe('TicketMarketplace', () => {
       const latestBlock = await publicClient.getBlock({ blockTag: 'latest' });
       const currentTime = BigInt(latestBlock.timestamp);
       
-      const bidExpiryTime = currentTime + 2n; // 2 seconds
-      const sellerExpiryTime = currentTime + 3n; // 3 seconds
-
-      console.log('\n=== Timestamps for Failed Delivery Test ===');
-      console.log('Current block timestamp:', currentTime.toString());
-      console.log('Bid expiry time:', bidExpiryTime.toString());
-      console.log('Seller expiry time:', sellerExpiryTime.toString());
+      const bidExpiryTime = currentTime + 4n;
+      const sellerExpiryTime = currentTime + 10n;
 
       // Create a new ticket for this test
       await sellerWalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -864,9 +1060,10 @@ describe('TicketMarketplace', () => {
         args: [ticketId, minBid]
       });
       
-      // Wait for bid expiry and seller expiry
-      await new Promise(resolve => setTimeout(resolve, 4000)); // Wait 4 seconds
+      // Wait for bid expiry
+      await new Promise(resolve => setTimeout(resolve, 10000));
       
+      // Get initial balance
       const initialBalance = await publicClient.readContract({
         address: mockUSDC.address,
         abi: mockUSDC.abi,
@@ -874,6 +1071,15 @@ describe('TicketMarketplace', () => {
         args: [buyer1]
       });
 
+      // Get the best bid first
+      await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getTheBestBid',
+        args: [ticketId]
+      });
+
+      // Confirm failed delivery
       await verifierWalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
@@ -906,29 +1112,47 @@ describe('TicketMarketplace', () => {
         transport: http()
       });
 
-      const currentTime = BigInt(Math.floor(Date.now() / 1000));
-      const bidExpiryTime = currentTime + 3600n;
-      const sellerExpiryTime = currentTime + 7200n;
+      // Get current block timestamp
+      const latestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+      const currentTime = BigInt(latestBlock.timestamp);
+      
+      const bidExpiryTime = currentTime + 4n;
+      const sellerExpiryTime = currentTime + 10n;
 
-      // Get the current ticket ID
-      const ticketId = await publicClient.readContract({
-        address: ticketMarketplace.address,
-        abi: ticketMarketplace.abi,
-        functionName: 'nextTicketId'
-      });
-
+      console.log("Should only allow verifier to confirm delivery currentTime", currentTime);
+      console.log("Should only allow verifier to confirm delivery bidExpiryTime", bidExpiryTime);
+      console.log("Should only allow verifier to confirm delivery sellerExpiryTime", sellerExpiryTime);
+      // Create a new ticket for this test
       await sellerWalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
+
+      // Get the new ticket ID
+      const ticketId = await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'nextTicketId'
+      }) - 1n;
 
       await buyer1WalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
         args: [ticketId, minBid]
+      });
+      
+      // Wait for bid expiry
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Get the best bid first
+      await publicClient.readContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'getTheBestBid',
+        args: [ticketId]
       });
       
       await expect(
@@ -961,7 +1185,7 @@ describe('TicketMarketplace', () => {
       const currentTime = BigInt(latestBlock.timestamp);
       
       // Set expiry times to be in the future
-      const bidExpiryTime = currentTime + 2n; // 2 seconds
+      const bidExpiryTime = currentTime + 4n; // 4 seconds
       const sellerExpiryTime = currentTime + 10n; // 10 seconds
 
       console.log('\n=== Timestamps for Bidding Expiry Test ===');
@@ -975,7 +1199,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Expired Concert", BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
+        args: ["Expired Concert", 0n, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1020,7 +1244,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", 0n, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1061,6 +1285,13 @@ describe('TicketMarketplace', () => {
     });
 
     it('Should process expired tickets and refund all bidders', async function () {
+       // Process expired tickets
+       await walletClient.writeContract({
+        address: ticketMarketplace.address,
+        abi: ticketMarketplace.abi,
+        functionName: 'processExpiredTickets'
+      });
+      
       const sellerWalletClient = createWalletClient({
         account: hardhatAccounts[1].account as Account,
         chain: hardhat,
@@ -1118,7 +1349,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Expired Concert", minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Expired Concert", 0n, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1221,7 +1452,7 @@ describe('TicketMarketplace', () => {
         functionName: 'tickets',
         args: [ticketId]
       });
-      expect(ticket[4]).to.equal(true); // sold status
+      expect(ticket[5]).to.equal(true); // sold status
 
       // Verify ticket is removed from seller's active tickets
       const sellerTickets = await publicClient.readContract({
