@@ -14,12 +14,16 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         address seller;
         uint256 sellerFID;
         string eventDetails;
+        string eventName;
+        uint256 eventDate;
+        string eventLocation;
         uint256 minBid;
         bool sold;
         address buyer;
         uint256 buyerFID;
         uint256 bidExpiryTime;  // Time after which no new bids can be placed
         uint256 sellerExpiryTime; // Time after which unsold tickets are refunded
+        uint256 createdAt;
         bool isHighestBidderFound; // Flag to track if highest bidder has been determined
     }
 
@@ -86,9 +90,20 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         verifier = _verifier;
     }
 
-    function listTicket(string calldata _details, uint256 _sellerFID, uint256 _minBid, uint256 _bidExpiryTime, uint256 _sellerExpiryTime) external nonReentrant {
+    function listTicket(
+        string calldata _details,
+        string calldata _eventName,
+        uint256 _eventDate,
+        string calldata _eventLocation,
+        uint256 _sellerFID,
+        uint256 _minBid,
+        uint256 _bidExpiryTime,
+        uint256 _sellerExpiryTime
+    ) external nonReentrant {
         // Check for empty string by comparing with empty string literal
         require(keccak256(bytes(_details)) != keccak256(bytes("")), "Empty event details");
+        require(keccak256(bytes(_eventName)) != keccak256(bytes("")), "Empty event name");
+        require(keccak256(bytes(_eventLocation)) != keccak256(bytes("")), "Empty event location");
         require(_minBid > 0, "Minimum bid must be greater than 0");
         require(_bidExpiryTime > block.timestamp, "Bid expiry time must be in the future");
         require(_sellerExpiryTime > _bidExpiryTime, "Seller expiry time must be after bid expiry");
@@ -98,12 +113,16 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
             seller: msg.sender,
             sellerFID: _sellerFID,
             eventDetails: _details,
+            eventName: _eventName,
+            eventDate: _eventDate,
+            eventLocation: _eventLocation,
             minBid: _minBid,
             sold: false,
             buyer: address(0),
             buyerFID: 0,
             bidExpiryTime: _bidExpiryTime,
             sellerExpiryTime: _sellerExpiryTime,
+            createdAt: block.timestamp,
             isHighestBidderFound: false
         });
 
