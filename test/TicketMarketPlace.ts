@@ -197,13 +197,13 @@ describe('TicketMarketplace', () => {
         functionName: 'tickets',
         args: [0n]
       });
-      console.log("ticket", ticket);
+     
       const ticketListFromContract = await publicClient.readContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'getAllTickets'
       });
-      
+    
       expect(ticket[1].toLowerCase()).to.equal(seller.toLowerCase());
       expect(ticket[3]).to.equal(eventDetails);
       expect(ticket[4]).to.equal(minBid);
