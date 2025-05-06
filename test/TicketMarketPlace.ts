@@ -184,6 +184,7 @@ describe('TicketMarketplace', () => {
       const eventName = "New Year's Concert";
       const eventDate = BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000));
       const eventLocation = "Madison Square Garden";
+      const ticketImage = "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco";
       const minBid = BigInt(100 * 10 ** 6);
       const currentTime = BigInt(Math.floor(Date.now() / 1000));
       const bidExpiryTime = currentTime + 3600n;
@@ -199,7 +200,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: [eventDetails, eventName, eventDate, eventLocation, sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: [eventDetails, eventName, eventDate, eventLocation, ticketImage, sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
       
       const ticket = await publicClient.readContract({
@@ -220,7 +221,8 @@ describe('TicketMarketplace', () => {
       expect(ticket[4]).to.equal(eventName);
       expect(ticket[5]).to.equal(eventDate);
       expect(ticket[6]).to.equal(eventLocation);
-      expect(ticket[7]).to.equal(minBid);
+      expect(ticket[7]).to.equal(ticketImage);
+      expect(ticket[8]).to.equal(minBid);
     });
 
     it('Should not allow listing with empty details', async function () {
@@ -240,44 +242,27 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: ["", "", 0n, "", sellerFID, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
+          args: ["", "", 0n, "", "ipfs://QmTicketImage", sellerFID, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
         })
       ).to.be.rejectedWith(/Empty event details/);
-    });
 
-    it('Should not allow listing with zero minimum bid', async function () {
-      const ticketListFromContract = await publicClient.readContract({
-        address: ticketMarketplace.address,
-        abi: ticketMarketplace.abi,
-        functionName: 'getAllTickets'
-      });
-      const sellerWalletClient = createWalletClient({
-        account: hardhatAccounts[1].account as Account,
-        chain: hardhat,
-        transport: http()
-      });
-
-      const currentTime = BigInt(Math.floor(Date.now() / 1000));
-      const bidExpiryTime = currentTime + 3600n;
-      const sellerExpiryTime = currentTime + 7200n;
-      
-      // Test with zero
+      // Test with zero minimum bid
       await expect(
         sellerWalletClient.writeContract({
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, 0n, bidExpiryTime, sellerExpiryTime]
+          args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, 0n, bidExpiryTime, sellerExpiryTime]
         })
       ).to.be.rejectedWith(/Minimum bid must be greater than 0/);
 
-      // Test with negative number (should also fail)
+      // Test with negative minimum bid
       await expect(
         sellerWalletClient.writeContract({
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, -1n, bidExpiryTime, sellerExpiryTime]
+          args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, -1n, bidExpiryTime, sellerExpiryTime]
         })
       ).to.be.rejected;
     });
@@ -295,9 +280,9 @@ describe('TicketMarketplace', () => {
 
       // List multiple tickets
       const tickets = [
-        { details: "Concert 1", eventName: "Concert 1", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 1", minBid: BigInt(100 * 10 ** 6) },
-        { details: "Concert 2", eventName: "Concert 2", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 2", minBid: BigInt(200 * 10 ** 6) },
-        { details: "Concert 3", eventName: "Concert 3", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 3", minBid: BigInt(300 * 10 ** 6) }
+        { details: "Concert 1", eventName: "Concert 1", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 1", ticketImage: "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco1", minBid: BigInt(100 * 10 ** 6) },
+        { details: "Concert 2", eventName: "Concert 2", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 2", ticketImage: "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco2", minBid: BigInt(200 * 10 ** 6) },
+        { details: "Concert 3", eventName: "Concert 3", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 3", ticketImage: "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco3", minBid: BigInt(300 * 10 ** 6) }
       ];
 
       const ticketListFromContract = await publicClient.readContract({
@@ -319,7 +304,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: [ticket.details, ticket.eventName, ticket.eventDate, ticket.eventLocation, sellerFID, ticket.minBid, bidExpiryTime, sellerExpiryTime]
+          args: [ticket.details, ticket.eventName, ticket.eventDate, ticket.eventLocation, ticket.ticketImage, sellerFID, ticket.minBid, bidExpiryTime, sellerExpiryTime]
         });
       }
 
@@ -376,6 +361,7 @@ describe('TicketMarketplace', () => {
         expect(ticket.eventName).to.equal(tickets[i].eventName);
         expect(ticket.eventDate).to.equal(tickets[i].eventDate);
         expect(ticket.eventLocation).to.equal(tickets[i].eventLocation);
+        expect(ticket.ticketImage).to.equal(tickets[i].ticketImage);
         expect(ticket.minBid).to.equal(tickets[i].minBid);
         expect(ticket.sold).to.equal(false);
         expect(ticket.buyer).to.equal("0x0000000000000000000000000000000000000000");
@@ -395,9 +381,9 @@ describe('TicketMarketplace', () => {
 
       // List multiple tickets
       const tickets = [
-        { details: "Concert 1", eventName: "Concert 1", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 1", minBid: BigInt(100 * 10 ** 6) },
-        { details: "Concert 2", eventName: "Concert 2", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 2", minBid: BigInt(200 * 10 ** 6) },
-        { details: "Concert 3", eventName: "Concert 3", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 3", minBid: BigInt(300 * 10 ** 6) }
+        { details: "Concert 1", eventName: "Concert 1", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 1", ticketImage: "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco1", minBid: BigInt(100 * 10 ** 6) },
+        { details: "Concert 2", eventName: "Concert 2", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 2", ticketImage: "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco2", minBid: BigInt(200 * 10 ** 6) },
+        { details: "Concert 3", eventName: "Concert 3", eventDate: BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), eventLocation: "Venue 3", ticketImage: "ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco3", minBid: BigInt(300 * 10 ** 6) }
       ];
 
       // Get initial ticket count
@@ -413,7 +399,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'listTicket',
-          args: [ticket.details, ticket.eventName, ticket.eventDate, ticket.eventLocation, sellerFID, ticket.minBid, bidExpiryTime, sellerExpiryTime]
+          args: [ticket.details, ticket.eventName, ticket.eventDate, ticket.eventLocation, ticket.ticketImage, sellerFID, ticket.minBid, bidExpiryTime, sellerExpiryTime]
         });
       }
 
@@ -438,7 +424,8 @@ describe('TicketMarketplace', () => {
         expect(ticket[4]).to.equal(tickets[i].eventName);
         expect(ticket[5]).to.equal(tickets[i].eventDate);
         expect(ticket[6]).to.equal(tickets[i].eventLocation);
-        expect(ticket[7]).to.equal(tickets[i].minBid);
+        expect(ticket[7]).to.equal(tickets[i].ticketImage);
+        expect(ticket[8]).to.equal(tickets[i].minBid);
       }
     });
   });
@@ -469,7 +456,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: [eventDetails, "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: [eventDetails, "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -525,7 +512,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -582,7 +569,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -645,14 +632,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert 1", "Concert 1", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue 1", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert 1", "Concert 1", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue 1", "ipfs://QmTicketImage1", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       await sellerWalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert 2", "Concert 2", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue 2", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert 2", "Concert 2", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue 2", "ipfs://QmTicketImage2", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket IDs
@@ -719,7 +706,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
       
       await expect(
@@ -776,7 +763,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -951,7 +938,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1063,7 +1050,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1147,7 +1134,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1219,7 +1206,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Expired Concert", "Expired Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Expired Venue", sellerFID, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
+        args: ["Expired Concert", "Expired Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Expired Venue", "ipfs://QmTicketImageExpired", sellerFID, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1264,7 +1251,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", sellerFID, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
+        args: ["Concert", "Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Venue", "ipfs://QmTicketImage", sellerFID, BigInt(100 * 10 ** 6), bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1369,7 +1356,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'listTicket',
-        args: ["Expired Concert", "Expired Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Expired Venue", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
+        args: ["Expired Concert", "Expired Concert", BigInt(Math.floor(new Date("2024-12-31").getTime() / 1000)), "Expired Venue", "ipfs://QmTicketImageExpired", sellerFID, minBid, bidExpiryTime, sellerExpiryTime]
       });
 
       // Get the new ticket ID
@@ -1473,7 +1460,7 @@ describe('TicketMarketplace', () => {
         args: [ticketId]
       });
       
-      expect(ticket[8]).to.equal(true);
+      expect(ticket[9]).to.equal(true);
 
       // Verify ticket is removed from seller's active tickets
       const sellerTickets = await publicClient.readContract({

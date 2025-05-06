@@ -17,6 +17,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         string eventName;
         uint256 eventDate;
         string eventLocation;
+        string ticketImage;  // URL or IPFS hash of the ticket image
         uint256 minBid;
         bool sold;
         address buyer;
@@ -95,6 +96,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         string calldata _eventName,
         uint256 _eventDate,
         string calldata _eventLocation,
+        string calldata _ticketImage,
         uint256 _sellerFID,
         uint256 _minBid,
         uint256 _bidExpiryTime,
@@ -104,6 +106,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         require(keccak256(bytes(_details)) != keccak256(bytes("")), "Empty event details");
         require(keccak256(bytes(_eventName)) != keccak256(bytes("")), "Empty event name");
         require(keccak256(bytes(_eventLocation)) != keccak256(bytes("")), "Empty event location");
+        require(keccak256(bytes(_ticketImage)) != keccak256(bytes("")), "Empty ticket image");
         require(_minBid > 0, "Minimum bid must be greater than 0");
         require(_bidExpiryTime > block.timestamp, "Bid expiry time must be in the future");
         require(_sellerExpiryTime > _bidExpiryTime, "Seller expiry time must be after bid expiry");
@@ -116,6 +119,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
             eventName: _eventName,
             eventDate: _eventDate,
             eventLocation: _eventLocation,
+            ticketImage: _ticketImage,
             minBid: _minBid,
             sold: false,
             buyer: address(0),
