@@ -1,11 +1,11 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
-import { baseSepolia } from 'viem/chains';
+import { baseSepolia, hardhat } from 'viem/chains';
 import hre from 'hardhat';
 import { privateKeyToAccount } from 'viem/accounts';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
-
+const chainToUse = hardhat
 async function main() {
   console.log('\n=== Starting Ticket Listing ===');
 
@@ -19,7 +19,7 @@ async function main() {
 
   // Setup clients
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: chainToUse,
     transport: http()
   });
 
@@ -27,7 +27,7 @@ async function main() {
   const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: chainToUse,
     transport: http()
   });
 
@@ -40,11 +40,20 @@ async function main() {
     const ticketMarketplaceAddress = process.env.TICKET_MARKETPLACE_ADDRESS as `0x${string}`;
 
     // Example ticket data
-    const eventDetails = "Concert on 2024-12-31";
-    const minBid = BigInt(100 * 10 ** 6); // 100 USDC
+    const eventDetails = "Mumbai Music Festival";
+    const eventName = "Mumbai Music Festival";
+    // Set event date to tomorrow at midnight
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const eventDate = BigInt(Math.floor(tomorrow.getTime() / 1000));
+    const eventLocation = "Mumbai";
+    const ticketImage = "https://imgs.search.brave.com/vYhHnb9dcA0W-hjbjfwC8CehAg8IxTkHrHdxs5o9BLE/rs:fit:860:0:0:0/g:ce/aHR0cHM6Ly9tZWRp/YS5pc3RvY2twaG90/by5jb20vaWQvMTE5/MTgxODI1OS9waG90/by9jcm93ZC1vbi1h/LW11c2ljLWZlc3Rp/dmFsLmpwZz9zPTYx/Mng2MTImdz0wJms9/MjAmYz1nNUFRbDkx/amZEX3pZc1ZaT0hX/SjhQNGJJcWNvVDV1/UnNpTFVrNGcxNGVB/PQ";
+    const sellerFID = 1n; // Replace with actual seller FID
+    const minBid = BigInt(10 * 10 ** 6); // 10 USDC
     const currentTime = BigInt(Math.floor(Date.now() / 1000));
-    const bidExpiryTime = currentTime + 3600n; // 1 hour from now
-    const sellerExpiryTime = currentTime + 7200n; // 2 hours from now
+    const bidExpiryTime = currentTime + 15n * 60n; // 15 minutes from now
+    const sellerExpiryTime = currentTime + 30n * 60n; // 30 minutes from now
 
     console.log('\nListing new ticket...');
     const listHash = await walletClient.writeContract({
@@ -53,7 +62,11 @@ async function main() {
       functionName: 'listTicket',
       args: [
         eventDetails,
-        0n, // initial bid amount
+        eventName,
+        eventDate,
+        eventLocation,
+        ticketImage,
+        sellerFID,
         minBid,
         bidExpiryTime,
         sellerExpiryTime
@@ -82,13 +95,7 @@ async function main() {
     console.log('\nAll Tickets in Marketplace:');
     tickets.forEach((ticket: any, index: number) => {
       console.log(`\nTicket #${index + 1}:`);
-      console.log('Event Details:', ticket.eventDetails);
-      console.log('Current Bid Amount:', Number(ticket.currentBidAmount) / 10 ** 6, 'USDC');
-      console.log('Minimum Bid:', Number(ticket.minBid) / 10 ** 6, 'USDC');
-      console.log('Bid Expiry Time:', new Date(Number(ticket.bidExpiryTime) * 1000).toLocaleString());
-      console.log('Seller Expiry Time:', new Date(Number(ticket.sellerExpiryTime) * 1000).toLocaleString());
-      console.log('Seller:', ticket.seller);
-      console.log('Current Bidder:', ticket.currentBidder);
+      console.log('Ticket:', ticket);
     });
 
   } catch (error) {

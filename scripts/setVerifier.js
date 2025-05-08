@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 async function main() {
     // Get the contract address from command line arguments
     const ticketMarketplaceAddress = "0xe7f1725e7734ce288f8367e1bb143e90bb3f0512";
-    const verifierAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+    const verifierAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 
     if (!ticketMarketplaceAddress || !verifierAddress) {
         console.error("Please provide both TicketMarketplace address and verifier address");

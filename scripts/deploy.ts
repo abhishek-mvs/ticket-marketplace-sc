@@ -1,11 +1,12 @@
 import { createPublicClient, createWalletClient, http } from 'viem';
-import { baseSepolia } from 'viem/chains';
+import { baseSepolia, hardhat } from 'viem/chains';
 import hre from 'hardhat';
 import { privateKeyToAccount } from 'viem/accounts';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+const chainToDeploy = baseSepolia
 async function main() {
   console.log('\n=== Starting Contract Deployment to Base Sepolia ===');
 
@@ -15,7 +16,7 @@ async function main() {
 
   // Setup clients
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: chainToDeploy,
     transport: http()
   });
 
@@ -23,7 +24,7 @@ async function main() {
   const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: chainToDeploy,
     transport: http()
   });
 

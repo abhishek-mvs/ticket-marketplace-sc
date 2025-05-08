@@ -136,21 +136,21 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         nextTicketId++;
     }
 
-    function placeBid(uint256 ticketId, uint256 bidAmount) external nonReentrant {
-        Ticket storage ticket = tickets[ticketId];
+    function placeBid(uint256 _ticketId, uint256 _bidAmount) external nonReentrant {
+        Ticket storage ticket = tickets[_ticketId];
         require(ticket.seller != address(0), "Ticket does not exist");
         require(!ticket.sold, "Already sold");
         require(block.timestamp < ticket.bidExpiryTime, "Bidding period has expired");
-        require(bidAmount >= ticket.minBid, "Bid too low");
-        require(!hasUserBid[ticketId][msg.sender], "User has already bid on this ticket");
+        require(_bidAmount >= ticket.minBid, "Bid too low");
+        require(!hasUserBid[_ticketId][msg.sender], "User has already bid on this ticket");
 
         // Transfer tokens to contract as lock
-        stablecoin.safeTransferFrom(msg.sender, address(this), bidAmount);
+        stablecoin.safeTransferFrom(msg.sender, address(this), _bidAmount);
 
         // Create new bid
         Bid memory newBid = Bid({
-            ticketId: ticketId,
-            amount: bidAmount,
+            ticketId: _ticketId,
+            amount: _bidAmount,
             timestamp: block.timestamp,
             isActive: true,
             isAccepted: false,
@@ -158,15 +158,15 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         });
 
         // Add bid to ticket's bid list
-        ticketBids[ticketId].push(newBid);
+        ticketBids[_ticketId].push(newBid);
         
         // Add bid to user's bid history
         userBids[msg.sender].push(newBid);
         
         // Mark user as having bid on this ticket
-        hasUserBid[ticketId][msg.sender] = true;
+        hasUserBid[_ticketId][msg.sender] = true;
 
-        emit BidPlaced(ticketId, msg.sender, bidAmount);
+        emit BidPlaced(_ticketId, msg.sender, _bidAmount);
     }
 
     function getTheBestBid(uint256 ticketId) external view returns (address winner, uint256 amount) {
