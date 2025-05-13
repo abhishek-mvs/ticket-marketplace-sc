@@ -35,6 +35,7 @@ async function main() {
       console.log(`Minimum Bid: ${ethers.formatEther(ticket.minBid)} ETH`);
       console.log(`ImageUri: ${ticket.ticketImage}`);
       console.log(`Status: ${ticket.sold ? "Sold" : "Available"}`);
+      console.log(`Status: ${ticket.status}`);
       if (ticket.sold) {
         console.log(`Buyer: ${ticket.buyer}`);
         console.log(`Buyer FID: ${ticket.buyerFID}`);

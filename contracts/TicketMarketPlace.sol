@@ -9,6 +9,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract TicketMarketplace is ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
 
+    enum TicketStatus {
+        active,
+        pending,
+        completed,
+        notSold
+    }
+
     struct Ticket {
         uint256 id;
         address seller;
@@ -26,6 +33,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         uint256 sellerExpiryTime; // Time after which unsold tickets are refunded
         uint256 createdAt;
         bool isHighestBidderFound; // Flag to track if highest bidder has been determined
+        TicketStatus status; // New field to track ticket status
     }
 
     struct Bid {
@@ -35,6 +43,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         bool isActive;
         bool isAccepted;
         address bidder;
+        string email;  // Added email field
     }
 
     IERC20 public stablecoin;
@@ -127,7 +136,8 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
             bidExpiryTime: _bidExpiryTime,
             sellerExpiryTime: _sellerExpiryTime,
             createdAt: block.timestamp,
-            isHighestBidderFound: false
+            isHighestBidderFound: false,
+            status: TicketStatus.active
         });
 
         sellerTickets[msg.sender].push(nextTicketId);
@@ -136,25 +146,28 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         nextTicketId++;
     }
 
-    function placeBid(uint256 _ticketId, uint256 _bidAmount) external nonReentrant {
+    function placeBid(uint256 _ticketId, uint256 _bidAmount, string calldata _email) external nonReentrant {
         Ticket storage ticket = tickets[_ticketId];
         require(ticket.seller != address(0), "Ticket does not exist");
+        require(ticket.status == TicketStatus.active, "Ticket is not available for purchase");
         require(!ticket.sold, "Already sold");
-        require(block.timestamp < ticket.bidExpiryTime, "Bidding period has expired");
-        require(_bidAmount >= ticket.minBid, "Bid too low");
-        require(!hasUserBid[_ticketId][msg.sender], "User has already bid on this ticket");
+        require(block.timestamp < ticket.bidExpiryTime, "Purchase period has expired");
+        require(_bidAmount >= ticket.minBid, "Amount too low");
+        require(!hasUserBid[_ticketId][msg.sender], "User has already purchased this ticket");
+        require(keccak256(bytes(_email)) != keccak256(bytes("")), "Email cannot be empty");
 
         // Transfer tokens to contract as lock
         stablecoin.safeTransferFrom(msg.sender, address(this), _bidAmount);
 
-        // Create new bid
+        // Create new bid (now representing a purchase)
         Bid memory newBid = Bid({
             ticketId: _ticketId,
             amount: _bidAmount,
             timestamp: block.timestamp,
             isActive: true,
             isAccepted: false,
-            bidder: msg.sender
+            bidder: msg.sender,
+            email: _email
         });
 
         // Add bid to ticket's bid list
@@ -166,103 +179,65 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         // Mark user as having bid on this ticket
         hasUserBid[_ticketId][msg.sender] = true;
 
+        // Update ticket status to pending
+        ticket.status = TicketStatus.pending;
+        ticket.buyer = msg.sender;
+
         emit BidPlaced(_ticketId, msg.sender, _bidAmount);
     }
 
-    function getTheBestBid(uint256 ticketId) external view returns (address winner, uint256 amount) {
+    function getTheBestBid(uint256 ticketId) external view returns (string memory email, uint256 amount) {
         Ticket storage ticket = tickets[ticketId];
         require(ticket.seller != address(0), "Ticket does not exist");
-        require(!ticket.sold, "Already processed");
-        require(block.timestamp >= ticket.bidExpiryTime, "Bidding period not ended");
+        require(ticket.status == TicketStatus.pending, "Ticket is not in pending state");
 
         Bid[] storage bids = ticketBids[ticketId];
-        require(bids.length > 0, "No bids found for this ticket");
+        require(bids.length > 0, "No purchase found for this ticket");
 
-        // Find the highest bid
-        uint256 highestBidIndex = 0;
-        uint256 highestAmount = 0;
+        // Get the purchase (first and only bid)
+        Bid storage purchase = bids[0];
+        require(purchase.isActive, "Purchase is not active");
 
-        for (uint256 i = 0; i < bids.length; i++) {
-            if (bids[i].isActive && bids[i].amount > highestAmount) {
-                highestAmount = bids[i].amount;
-                highestBidIndex = i;
-            }
-        }
-
-        require(highestAmount > 0, "No valid bid found");
-        return (bids[highestBidIndex].bidder, highestAmount);
+        return (purchase.email, purchase.amount);
     }
 
     function confirmTicketDelivery(uint256 ticketId, bool success) external nonReentrant {
-        require(msg.sender == verifier, "Only verifier can confirm delivery");
         Ticket storage ticket = tickets[ticketId];
         require(ticket.seller != address(0), "Ticket does not exist");
-        require(!ticket.sold, "Already processed");
-        require(block.timestamp >= ticket.bidExpiryTime, "Bidding period not ended");
+        require(ticket.status == TicketStatus.pending, "Ticket is not in pending state");
+        require(block.timestamp <= ticket.sellerExpiryTime, "Seller expiry time has passed");
 
         Bid[] storage bids = ticketBids[ticketId];
-        require(bids.length > 0, "No bids found for this ticket");
+        require(bids.length > 0, "No purchase found for this ticket");
 
-        // Find the highest bid
-        uint256 highestBidIndex = 0;
-        uint256 highestAmount = 0;
-
-        for (uint256 i = 0; i < bids.length; i++) {
-            if (bids[i].isActive && bids[i].amount > highestAmount) {
-                highestAmount = bids[i].amount;
-                highestBidIndex = i;
-            }
-        }
-
-        require(highestAmount > 0, "No valid bid found");
-
-        // Refund all other bidders and update bid status
-        for (uint256 i = 0; i < bids.length; i++) {
-            if (i != highestBidIndex && bids[i].isActive) {
-                // Refund the bidder
-                stablecoin.safeTransfer(bids[i].bidder, bids[i].amount);
-                
-                // Update status in ticketBids
-                bids[i].isActive = false;
-                bids[i].isAccepted = false;
-                
-                // Update status in userBids
-                Bid[] storage userBidsList = userBids[bids[i].bidder];
-                for (uint256 j = 0; j < userBidsList.length; j++) {
-                    if (userBidsList[j].ticketId == ticketId && userBidsList[j].isActive) {
-                        userBidsList[j].isActive = false;
-                        userBidsList[j].isAccepted = false;
-                        break;
-                    }
-                }
-            }
-        }
+        // Get the purchase (bid)
+        Bid storage purchase = bids[0];
+        require(purchase.isActive, "Purchase is not active");
 
         if (!success) {
-            // Refund the winning bidder
-            stablecoin.safeTransfer(bids[highestBidIndex].bidder, highestAmount);
+            // Refund the buyer
+            stablecoin.safeTransfer(purchase.bidder, purchase.amount);
+            ticket.status = TicketStatus.notSold;
         } else {
             // Transfer funds to seller
-            stablecoin.safeTransfer(ticket.seller, highestAmount);
-            ticket.buyer = bids[highestBidIndex].bidder;
+            stablecoin.safeTransfer(ticket.seller, purchase.amount);
+            ticket.status = TicketStatus.completed;
+            ticket.sold = true;
         }
 
-        // Update bid status
-        bids[highestBidIndex].isActive = false;
-        bids[highestBidIndex].isAccepted = success;
+        // Update purchase status
+        purchase.isActive = false;
+        purchase.isAccepted = success;
 
         // Update status in userBids
-        Bid[] storage winningUserBids = userBids[bids[highestBidIndex].bidder];
-        for (uint256 j = 0; j < winningUserBids.length; j++) {
-            if (winningUserBids[j].ticketId == ticketId && winningUserBids[j].isActive) {
-                winningUserBids[j].isActive = false;
-                winningUserBids[j].isAccepted = success;
+        Bid[] storage userBidsList = userBids[purchase.bidder];
+        for (uint256 j = 0; j < userBidsList.length; j++) {
+            if (userBidsList[j].ticketId == ticketId && userBidsList[j].isActive) {
+                userBidsList[j].isActive = false;
+                userBidsList[j].isAccepted = success;
                 break;
             }
         }
-
-        // Mark ticket as sold only after all transactions are complete
-        ticket.sold = true;
 
         emit ProofSubmitted(ticketId, ticket.seller);
     }
@@ -275,40 +250,40 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         for (uint256 i = 0; i < nextTicketId; i++) {
             Ticket storage ticket = tickets[i];
             
-            // Skip if ticket doesn't exist or is already sold
-            if (ticket.seller == address(0) || ticket.sold) {
+            // Skip if ticket doesn't exist or is already completed
+            if (ticket.seller == address(0) || ticket.status == TicketStatus.completed) {
                 continue;
             }
 
-            // Check if seller expiry time has passed
-            if (block.timestamp > ticket.sellerExpiryTime) {
-                // Get all bids for this ticket
+            // Check if seller expiry time has passed and ticket is in pending state
+            if (block.timestamp > ticket.sellerExpiryTime && ticket.status == TicketStatus.pending) {
+                // Get the purchase for this ticket
                 Bid[] storage bids = ticketBids[i];
+                require(bids.length > 0, "No purchase found for this ticket");
                 
-                // Refund all bidders and update bid status in all mappings
-                for (uint256 j = 0; j < bids.length; j++) {
-                    if (bids[j].isActive) {
-                        // Refund the bidder
-                        stablecoin.safeTransfer(bids[j].bidder, bids[j].amount);
-                        
-                        // Update status in ticketBids
-                        bids[j].isActive = false;
-                        bids[j].isAccepted = false; // Ensure bid is marked as not accepted
-                        
-                        // Update status in userBids
-                        Bid[] storage userBidsList = userBids[bids[j].bidder];
-                        for (uint256 k = 0; k < userBidsList.length; k++) {
-                            if (userBidsList[k].ticketId == i && userBidsList[k].isActive) {
-                                userBidsList[k].isActive = false;
-                                userBidsList[k].isAccepted = false; // Ensure bid is marked as not accepted
-                                break;
-                            }
+                // Get the purchase
+                Bid storage purchase = bids[0];
+                if (purchase.isActive) {
+                    // Refund the buyer
+                    stablecoin.safeTransfer(purchase.bidder, purchase.amount);
+                    
+                    // Update purchase status
+                    purchase.isActive = false;
+                    purchase.isAccepted = false;
+                    
+                    // Update status in userBids
+                    Bid[] storage userBidsList = userBids[purchase.bidder];
+                    for (uint256 j = 0; j < userBidsList.length; j++) {
+                        if (userBidsList[j].ticketId == i && userBidsList[j].isActive) {
+                            userBidsList[j].isActive = false;
+                            userBidsList[j].isAccepted = false;
+                            break;
                         }
                     }
                 }
     
-                // Mark ticket as sold
-                ticket.sold = true;
+                // Update ticket status to notSold
+                ticket.status = TicketStatus.notSold;
 
                 emit TicketExpired(i, ticket.seller);
             }

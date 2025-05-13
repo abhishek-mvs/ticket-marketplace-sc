@@ -8,10 +8,20 @@ async function main() {
     process.env.TICKET_MARKETPLACE_ADDRESS || ""
   ) as TicketMarketplace;
 
-  const ticketId = 1; // Ticket #3 (Mumbai Music Festival)
-  const minBid = ethers.parseEther("20"); // Minimum bid from ticket details
-  const bidAmount = ethers.parseEther("20"); // Bidding slightly higher than minimum
+  const ticketId = 0; // Ticket #3 (Mumbai Music Festival)
+  const minBid = ethers.parseEther("10"); // Minimum bid from ticket details
+  const bidAmount = ethers.parseEther("10"); // Bidding slightly higher than minimum
 
+      // Check current allowance
+  const currentAllowance = await publicClient.readContract({
+    address: mockUSDCAddress,
+    abi: mockUSDCAbi,
+    functionName: 'allowance',
+    args: [owner, ticketMarketplaceAddress]
+  });
+
+  console.log('\nCurrent Allowance:', currentAllowance.toString());
+  
   console.log(`Placing bid for Ticket #${ticketId}...`);
   console.log(`Event: Mumbai Music Festival`);
   console.log(`Minimum Bid: ${ethers.formatEther(minBid)} ETH`);
@@ -19,7 +29,7 @@ async function main() {
 
   try {
     // Place the bid
-    const tx = await ticketMarketplace.placeBid(ticketId, bidAmount);
+    const tx = await ticketMarketplace.placeBid(ticketId, bidAmount, "test@test.com");
     console.log("Transaction hash:", tx.hash);
     
     // Wait for transaction to be mined

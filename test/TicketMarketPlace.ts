@@ -19,6 +19,7 @@ describe('TicketMarketplace', () => {
   let sellerFID: bigint;
   let buyer1FID: bigint;
   let buyer2FID: bigint;
+  let email: string;
 
   before(async () => {
     // Setup clients
@@ -34,6 +35,7 @@ describe('TicketMarketplace', () => {
     buyer1 = hardhatAccounts[2].account.address;
     buyer2 = hardhatAccounts[3].account.address;
     verifier = hardhatAccounts[4].account.address;
+    email = "test@test.com";
 
     // Set FID values
     sellerFID = 1n;
@@ -470,7 +472,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
       
       // Check if bid was recorded in ticketBids
@@ -526,7 +528,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
       
       await expect(
@@ -534,7 +536,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'placeBid',
-          args: [ticketId, higherBid]
+          args: [ticketId, higherBid, email]
         })
       ).to.be.rejectedWith("User has already bid on this ticket");
     });
@@ -584,14 +586,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
 
       await buyer2WalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
+        args: [ticketId, minBid + BigInt(50 * 10 ** 6), email]
       });
 
       const ticketBids = await publicClient.readContract({
@@ -656,14 +658,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId1, minBid]
+        args: [ticketId1, minBid, email]
       });
 
       await buyer1WalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId2, minBid + BigInt(50 * 10 ** 6)]
+        args: [ticketId2, minBid + BigInt(50 * 10 ** 6), email]
       });
 
       const userBids = await publicClient.readContract({
@@ -714,7 +716,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'placeBid',
-          args: [0n, lowBid]
+          args: [0n, lowBid, email]
         })
       ).to.be.rejectedWith("Bid too low");
     });
@@ -778,14 +780,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
 
       await buyer2WalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
+        args: [ticketId, minBid + BigInt(50 * 10 ** 6), email]
       });
       const latestBlockAfterPlaceBid = await publicClient.getBlock({ blockTag: 'latest' });
       const currentTimeAfterPlaceBid = BigInt(latestBlockAfterPlaceBid.timestamp);
@@ -953,14 +955,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
 
       await buyer2WalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
+        args: [ticketId, minBid + BigInt(50 * 10 ** 6), email]
       });
       
       // Wait for bid expiry
@@ -1064,7 +1066,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
       
       // Wait for bid expiry
@@ -1148,7 +1150,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
       
       // Wait for bid expiry
@@ -1224,7 +1226,7 @@ describe('TicketMarketplace', () => {
           address: ticketMarketplace.address,
           abi: ticketMarketplace.abi,
           functionName: 'placeBid',
-          args: [ticketId, BigInt(100 * 10 ** 6)]
+          args: [ticketId, BigInt(100 * 10 ** 6), email]
         })
       ).to.be.rejectedWith("Bidding period has expired");
     });
@@ -1274,7 +1276,7 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, BigInt(100 * 10 ** 6)]
+        args: [ticketId, BigInt(100 * 10 ** 6), email]
       });
 
       const userBids = await publicClient.readContract({
@@ -1371,14 +1373,14 @@ describe('TicketMarketplace', () => {
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid]
+        args: [ticketId, minBid, email]
       });
 
       await buyer2WalletClient.writeContract({
         address: ticketMarketplace.address,
         abi: ticketMarketplace.abi,
         functionName: 'placeBid',
-        args: [ticketId, minBid + BigInt(50 * 10 ** 6)]
+        args: [ticketId, minBid + BigInt(50 * 10 ** 6), email]
       });
 
       // Check balances after placing bids
