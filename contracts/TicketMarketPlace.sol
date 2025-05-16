@@ -34,6 +34,7 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         uint256 createdAt;
         bool isHighestBidderFound; // Flag to track if highest bidder has been determined
         TicketStatus status; // New field to track ticket status
+        bytes32 privateBookingHash; // Private booking hash
     }
 
     struct Bid {
@@ -109,7 +110,8 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
         uint256 _sellerFID,
         uint256 _minBid,
         uint256 _bidExpiryTime,
-        uint256 _sellerExpiryTime
+        uint256 _sellerExpiryTime,
+        bytes32 _privateBookingHash
     ) external nonReentrant {
         // Check for empty string by comparing with empty string literal
         require(keccak256(bytes(_details)) != keccak256(bytes("")), "Empty event details");
@@ -137,7 +139,8 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
             sellerExpiryTime: _sellerExpiryTime,
             createdAt: block.timestamp,
             isHighestBidderFound: false,
-            status: TicketStatus.active
+            status: TicketStatus.active,
+            privateBookingHash: _privateBookingHash
         });
 
         sellerTickets[msg.sender].push(nextTicketId);
@@ -255,29 +258,34 @@ contract TicketMarketplace is ReentrancyGuard, Ownable {
                 continue;
             }
 
-            // Check if seller expiry time has passed and ticket is in pending state
-            if (block.timestamp > ticket.sellerExpiryTime && ticket.status == TicketStatus.pending) {
+            // Check if seller expiry time has passed and ticket is in pending or active state
+            if (block.timestamp > ticket.sellerExpiryTime && 
+                (ticket.status == TicketStatus.pending || ticket.status == TicketStatus.active)) {
                 // Get the purchase for this ticket
                 Bid[] storage bids = ticketBids[i];
-                require(bids.length > 0, "No purchase found for this ticket");
                 
-                // Get the purchase
-                Bid storage purchase = bids[0];
-                if (purchase.isActive) {
-                    // Refund the buyer
-                    stablecoin.safeTransfer(purchase.bidder, purchase.amount);
+                // Only process refunds if there are bids and ticket is in pending state
+                if (ticket.status == TicketStatus.pending) {
+                    require(bids.length > 0, "No purchase found for this ticket");
                     
-                    // Update purchase status
-                    purchase.isActive = false;
-                    purchase.isAccepted = false;
-                    
-                    // Update status in userBids
-                    Bid[] storage userBidsList = userBids[purchase.bidder];
-                    for (uint256 j = 0; j < userBidsList.length; j++) {
-                        if (userBidsList[j].ticketId == i && userBidsList[j].isActive) {
-                            userBidsList[j].isActive = false;
-                            userBidsList[j].isAccepted = false;
-                            break;
+                    // Get the purchase
+                    Bid storage purchase = bids[0];
+                    if (purchase.isActive) {
+                        // Refund the buyer
+                        stablecoin.safeTransfer(purchase.bidder, purchase.amount);
+                        
+                        // Update purchase status
+                        purchase.isActive = false;
+                        purchase.isAccepted = false;
+                        
+                        // Update status in userBids
+                        Bid[] storage userBidsList = userBids[purchase.bidder];
+                        for (uint256 j = 0; j < userBidsList.length; j++) {
+                            if (userBidsList[j].ticketId == i && userBidsList[j].isActive) {
+                                userBidsList[j].isActive = false;
+                                userBidsList[j].isAccepted = false;
+                                break;
+                            }
                         }
                     }
                 }

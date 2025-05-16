@@ -5,7 +5,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
-const chainToUse = hardhat
+const chainToUse = baseSepolia
 async function main() {
   console.log('\n=== Starting Expired Tickets Processing ===');
 
